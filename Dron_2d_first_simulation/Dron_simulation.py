@@ -17,10 +17,10 @@ from modulus.sym.eq.pdes.navier_stokes import NavierStokes
 from modulus.sym.key import Key
 from modulus.sym.solver import Solver
 
-# Новий механізм параметризації
+# New parameterization mechanism
 from modulus.sym.geometry.parameterization import Parameterization
 
-# Геометричні примітиви з Modulus
+# Geometric primitives from Modulus
 from modulus.sym.geometry.primitives_2d import (
     Rectangle,
     Polygon as SymPolygon,
@@ -32,35 +32,35 @@ from modulus.sym.eq.pdes.turbulence_zero_eq import ZeroEquation
 
 def plot_geometry():
     """
-    Візуалізує геометрію симуляції з деталями для дрона, пропелерів, будівель,
-    тунелю з нерівностями та додаванням вихрових генераторів.
+    Visualizes the simulation geometry with details for the drone, propellers, buildings,
+    tunnel irregularities, and addition of vortex generators.
     """
-    # Визначення геометрії
+    # Define geometry
     width = 10.0
     height = 5.0
 
-    # Масштабування дрона
-    drone_scale = 0.8  # Зменшення розміру дрона на 50%
+    # Drone scaling
+    drone_scale = 0.8  # Reduce drone size by 50%
 
-    # Вітрова труба з нерівностями (полігон)
+    # Wind tunnel with irregularities (polygon)
     tunnel_points = [
         (-width / 2, -height / 2),
         (-width / 2,  height / 2),
         (-3,  height / 2),
-        (-2,  height / 2 - 0.5),  # Нерівність на верхній стінці
+        (-2,  height / 2 - 0.5),  # Irregularity on the upper wall
         ( 0,  height / 2),
         ( 2,  height / 2 - 0.5),
         ( 3,  height / 2),
         ( width / 2,  height / 2),
         ( width / 2, -height / 2),
         ( 3, -height / 2),
-        ( 2, -height / 2 + 0.5),  # Нерівність на нижній стінці
+        ( 2, -height / 2 + 0.5),  # Irregularity on the lower wall
         ( 0, -height / 2),
         (-2, -height / 2 + 0.5),
         (-3, -height / 2),
     ]
 
-    # Дрон (головний корпус)
+    # Drone (main body)
     drone_body_points = [
         (-0.5 * drone_scale, -0.1 * drone_scale + 0.7),
         (-0.5 * drone_scale, 0.1 * drone_scale + 0.7),
@@ -82,7 +82,7 @@ def plot_geometry():
     front_propeller_center = (-1.0 * drone_scale, 0.55 * drone_scale + 0.7)
     rear_propeller_center = (1.0 * drone_scale, 0.55 * drone_scale + 0.7)
 
-    # Лопаті пропелерів (4 лопаті для кожного)
+    # Propeller blades (4 blades for each)
     propeller_length = 0.3 * drone_scale
     propeller_width = 0.05 * drone_scale
 
@@ -106,21 +106,21 @@ def plot_geometry():
     front_blades = create_blades(front_propeller_center, propeller_length, propeller_width)
     rear_blades = create_blades(rear_propeller_center, propeller_length, propeller_width)
 
-    # Будівлі
+    # Buildings
     building1_points = [(-4, -2.5), (-3.5, -2.5), (-3.5, -1), (-4, -1)]
     building2_points = [( 3.5, -2.5), ( 4, -2.5), ( 4,  1.0), ( 3.5,  1.0)]
 
-    # Вихрові генератори
+    # Vortex generators
     vortex_generators = [
-        [(-4.5, -1.8), (-4.2, -1.5), (-4.5, -1.2)],  # Малий трикутник зліва
-        [( 2.0,  1.2), ( 2.3,  1.5), ( 2.0,  1.8)],  # Малий трикутник справа
+        [(-4.5, -1.8), (-4.2, -1.5), (-4.5, -1.2)],  # Small triangle on the left
+        [( 2.0,  1.2), ( 2.3,  1.5), ( 2.0,  1.8)],  # Small triangle on the right
     ]
 
-    # Перешкоди
+    # Obstacles
     obstacle1_points = [
-        (-3, -1.5),  # Опущена нижче
+        (-3, -1.5),
         (-2.5, -1.5),
-        (-2.5, -0.7),  # Зменшена висота
+        (-2.5, -0.7),
         (-3, -0.7)
     ]
     obstacle2_points = [
@@ -130,14 +130,14 @@ def plot_geometry():
         (1, -1.0)
     ]
 
-    # Візуалізація
+    # Visualization
     fig, ax = plt.subplots(figsize=(10, 5))
 
-    # Вітрова труба
+    # Wind tunnel
     tunnel_patch = plt.Polygon(tunnel_points, closed=True, edgecolor='black', facecolor='none', linewidth=1.5)
     ax.add_patch(tunnel_patch)
 
-    # Дрон
+    # Drone
     drone_body_patch = plt.Polygon(drone_body_points,  closed=True, edgecolor='blue', facecolor='none', linewidth=1.5)
     left_wing_patch  = plt.Polygon(left_wing_points,   closed=True, edgecolor='blue', facecolor='none', linewidth=1.5)
     right_wing_patch = plt.Polygon(right_wing_points,  closed=True, edgecolor='blue', facecolor='none', linewidth=1.5)
@@ -145,29 +145,29 @@ def plot_geometry():
     ax.add_patch(left_wing_patch)
     ax.add_patch(right_wing_patch)
 
-    # Пропелери
+    # Propellers
     for blade in front_blades + rear_blades:
         blade_patch = plt.Polygon(blade, closed=True, edgecolor='purple', facecolor='none', linewidth=1.5)
         ax.add_patch(blade_patch)
 
-    # Будівлі
+    # Buildings
     building1_patch = plt.Polygon(building1_points, closed=True, edgecolor='red', facecolor='none', linewidth=1.5)
     building2_patch = plt.Polygon(building2_points, closed=True, edgecolor='red', facecolor='none', linewidth=1.5)
     ax.add_patch(building1_patch)
     ax.add_patch(building2_patch)
 
-    # Вихрові генератори
+    # Vortex generators
     for vortex in vortex_generators:
         vortex_patch = plt.Polygon(vortex, closed=True, edgecolor='green', facecolor='lightgreen', linewidth=1.5)
         ax.add_patch(vortex_patch)
 
-    # Перешкоди
+    # Obstacles
     obstacle1_patch = plt.Polygon(obstacle1_points, closed=True, edgecolor='orange', facecolor='none', linewidth=1.5)
     obstacle2_patch = plt.Polygon(obstacle2_points, closed=True, edgecolor='orange', facecolor='none', linewidth=1.5)
     ax.add_patch(obstacle1_patch)
     ax.add_patch(obstacle2_patch)
 
-    # Налаштування графіка
+    # Graph settings
     ax.set_aspect('equal')
     ax.set_xlim([-6, 6])
     ax.set_ylim([-3, 3])
@@ -178,20 +178,20 @@ def plot_geometry():
     plt.show()
 
 
-def visualize_results_and_save_vtp(
+def visualize_results_and_save_vts(
         solver,
-        flow_net,  # <-- об’єкт архітектури (PyTorch-модель)
-        flow_network_node,  # <-- об’єкт Node
+        flow_net,
+        flow_network_node,
         x_min, x_max, y_min, y_max,
-        t_values,  # <-- список значень часу
+        t_values,
         nx=100,
         ny=100,
-        vtp_filename_template="results_{t:.2f}.vtp",
-        drone_geometry=None  # <-- об'єкт геометрії дрона для візуалізації
+        vts_filename_template="results_{t:.2f}.vts",
+        drone_geometry=None
 ):
     """
-    Візуалізує результати (u, v, p, speed=|v|) на прямокутній сітці [x_min..x_max]×[y_min..y_max]
-    для кожного часу в t_values, а також зберігає ці дані у форматі .vtp.
+    Visualizes the results (u, v, p, speed=|v|) on a rectangular grid [x_min..x_max]×[y_min..y_max]
+    for each time in t_values, and saves the data in .vts format.
 
     Parameters:
         solver: Solver object
@@ -200,14 +200,14 @@ def visualize_results_and_save_vtp(
         x_min, x_max, y_min, y_max: float, boundaries of the grid
         t_values: list or array of time values
         nx, ny: int, number of grid points
-        vtp_filename_template: str, template for .vtp filenames
-        drone_geometry: список точок або об'єкт геометрії дрона для візуалізації
+        vts_filename_template: str, template for .vtp filenames
+        drone_geometry: list of points or drone geometry object for visualization
     """
 
     for t in t_values:
         print(f"Processing time t = {t:.2f}")
 
-        # 1) Створюємо сітку точок (NumPy)
+        # 1) Create grid points (NumPy)
         x_vals = np.linspace(x_min, x_max, nx)
         y_vals = np.linspace(y_min, y_max, ny)
         X, Y = np.meshgrid(x_vals, y_vals)
@@ -219,38 +219,38 @@ def visualize_results_and_save_vtp(
             "t": T.flatten()[:, None],
         }
 
-        # 2) Переводимо flow_network_node в eval-режим
+        # 2) Set flow_network_node to eval mode
         flow_net.eval()
 
-        # 3) Формуємо invar_torch
+        # 3) Form invar_torch
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         invar_torch = {}
         for k, v in invar_np.items():
             invar_torch[k] = torch.tensor(v, dtype=torch.float32, device=device)
 
-        # 4) Прямий прохід (forward pass)
+        # 4) Forward pass
         with torch.no_grad():
             outvar_torch = flow_network_node.evaluate(invar_torch)
 
-        # 5) Перетворюємо виходи назад у NumPy і надаємо формату (ny, nx)
+        # 5) Convert outputs back to NumPy and reshape to (ny, nx)
         u = outvar_torch["u"].cpu().numpy().reshape(X.shape)
         v = outvar_torch["v"].cpu().numpy().reshape(X.shape)
         p = outvar_torch["p"].cpu().numpy().reshape(X.shape)
         speed = np.sqrt(u**2 + v**2)
 
         # ---------------------------
-        # 6) ВІЗУАЛІЗАЦІЯ MATPLOTLIB
+        # 6) MATPLOTLIB VISUALIZATION
         # ---------------------------
         fig, axs = plt.subplots(1, 3, figsize=(18, 6))
 
-        # Векторне поле (u,v)
+        # Vector field (u,v)
         axs[0].quiver(X, Y, u, v, scale=5)
         axs[0].set_title(f"Velocity Field (u, v) at t={t:.2f}")
         axs[0].set_aspect("equal", "box")
         axs[0].set_xlabel("x")
         axs[0].set_ylabel("y")
 
-        # Поле тиску (p)
+        # Pressure field (p)
         cont1 = axs[1].contourf(X, Y, p, levels=50, cmap="viridis")
         fig.colorbar(cont1, ax=axs[1])
         axs[1].set_title(f"Pressure Field (p) at t={t:.2f}")
@@ -258,7 +258,7 @@ def visualize_results_and_save_vtp(
         axs[1].set_xlabel("x")
         axs[1].set_ylabel("y")
 
-        # Модуль швидкості |v|
+        # Speed magnitude |v|
         cont2 = axs[2].contourf(X, Y, speed, levels=50, cmap="plasma")
         fig.colorbar(cont2, ax=axs[2])
         axs[2].quiver(X, Y, u, v, color="white", scale=5, alpha=0.8)
@@ -267,7 +267,7 @@ def visualize_results_and_save_vtp(
         axs[2].set_xlabel("x")
         axs[2].set_ylabel("y")
 
-        # Додавання геометрії дрона, якщо надано
+        # Add drone geometry if provided
         if drone_geometry is not None:
             for geom in drone_geometry:
                 geom_x, geom_y = zip(*geom)
@@ -279,7 +279,7 @@ def visualize_results_and_save_vtp(
         plt.show()
 
         # ---------------------------------
-        # 7) ЗБЕРЕЖЕННЯ РЕЗУЛЬТАТІВ У .VTP
+        # 7) SAVING RESULTS TO .VTS
         # ---------------------------------
         points = np.zeros((nx * ny, 3), dtype=np.float32)
         points[:, 0] = X.flatten()
@@ -287,42 +287,42 @@ def visualize_results_and_save_vtp(
         points[:, 2] = 0.0  # 2D
 
         grid = pv.StructuredGrid()
-        grid.dimensions = (nx, ny, 1)  # якщо X.shape == (ny, nx)
+        grid.dimensions = (nx, ny, 1)
         grid.points = points
 
         grid.point_data["u"] = u.flatten()
         grid.point_data["v"] = v.flatten()
         grid.point_data["p"] = p.flatten()
-        grid.point_data["speed"] = speed.flatten()  # Додавання speed
+        grid.point_data["speed"] = speed.flatten()
 
-        # Формування імені файлу
-        vtp_filename = vtp_filename_template.format(t=t)
-        grid.save(vtp_filename)
-        print(f"[INFO] Results at t={t:.2f} saved to '{vtp_filename}'")
+        # Formulate file name
+        vts_filename = vts_filename_template.format(t=t)
+        grid.save(vts_filename)
+        print(f"[INFO] Results at t={t:.2f} saved to '{vts_filename}'")
 
 
 @modulus.sym.main(config_path="conf", config_name="config")
 def run(cfg: ModulusConfig) -> None:
     """
-    Основна функція симуляції потоку повітря довкола дрона
-    з використанням Navier-Stokes та Modulus, з урахуванням турбулентності та обертання пропелерів.
+    Main function for simulating airflow around a drone
+    using Navier-Stokes and Modulus, accounting for turbulence and propeller rotation.
     """
     # ---------------------
-    # І. ЗАДАННЯ ГЕОМЕТРІЇ
+    # I. GEOMETRY DEFINITION
     # ---------------------
     width = 10.0
     height = 5.0
-    drone_scale = 0.8  # Зменшення розміру дрона на 50%
+    drone_scale = 0.8  # Reduce drone size by 20%
 
-    # Параметри часу (кутова швидкість пропелерів)
+    # Time parameters (propeller angular speed)
     omega = 20.0
     t_symbol = Symbol("t")
 
-    # Збільшення часу в 3 рази
+
     time_range = (0.0, 3 * (2.0 * np.pi / omega))
     time_param = Parameterization({t_symbol: time_range})
 
-    # === Дрон ===
+    # === Drone ===
     drone_body = SymPolygon([
         (-0.5 * drone_scale, -0.1 * drone_scale + 0.7),
         (-0.5 * drone_scale, 0.1 * drone_scale + 0.7),
@@ -342,16 +342,16 @@ def run(cfg: ModulusConfig) -> None:
         (0.5 * drone_scale, 0.2 * drone_scale + 0.7),
     ])
 
-    # Пропелери (дві окружності)
+    # Propellers (two circles)
     front_propeller_center = (-1.0 * drone_scale, 0.55 * drone_scale + 0.7)
     rear_propeller_center = (1.0 * drone_scale, 0.55 * drone_scale + 0.7)
     front_propeller = SymCircle(center=front_propeller_center, radius=0.1 * drone_scale)
     rear_propeller = SymCircle(center=rear_propeller_center, radius=0.1 * drone_scale)
 
-    # Сукупна геометрія дрона
+    # Combined drone geometry
     drone = drone_body + left_wing + right_wing + front_propeller + rear_propeller
 
-    # === Тунель з нерівностями (полігон) ===
+    # === Wind tunnel with irregularities (polygon) ===
     tunnel_points = [
         (-width / 2, -height / 2),
         (-width / 2,  height / 2),
@@ -370,11 +370,11 @@ def run(cfg: ModulusConfig) -> None:
     ]
     tunnel = SymPolygon(tunnel_points)
 
-    # === Перешкоди всередині тунелю ===
+    # === Obstacles inside the tunnel ===
     obstacle1 = SymPolygon([
-        (-3, -1.5),  # Опущена нижче
+        (-3, -1.5),
         (-2.5, -1.5),
-        (-2.5, -0.7),  # Зменшена висота
+        (-2.5, -0.7),
         (-3, -0.7)
     ])
     obstacle2 = SymPolygon([
@@ -384,7 +384,7 @@ def run(cfg: ModulusConfig) -> None:
         (1, -1.0)
     ])
 
-    # === Вихрові генератори (трикутники) ===
+    # === Vortex generators (triangles) ===
     vortex_generator1 = SymPolygon([
         (-4.5, -1.8),
         (-4.2, -1.5),
@@ -396,7 +396,7 @@ def run(cfg: ModulusConfig) -> None:
         (2.0, 1.8),
     ])
 
-    # === Будівлі (два полігони) ===
+    # === Buildings (two polygons) ===
     building1 = SymPolygon([
         (-4, -2.5),
         (-3.5, -2.5),
@@ -411,62 +411,62 @@ def run(cfg: ModulusConfig) -> None:
     ])
 
     # ---------------------
-    # ІІ. ВИЗНАЧЕННЯ РІВНЯНЬ
+    # II. DEFINE EQUATIONS
     # ---------------------
-    nu  = 1.48e-5  # кінематична в'язкість
-    rho = 1.293    # густина повітря
+    nu  = 1.48e-5  # Kinematic viscosity
+    rho = 1.293    # Air density
 
     navier_stokes = NavierStokes(nu=nu, rho=rho, dim=2, time=True)
     zero_eq       = ZeroEquation(nu=nu, max_distance=0.5, dim=2, rho=rho)
 
-    # Нейронна мережа
+    # Neural network
     flow_net = instantiate_arch(
         input_keys = [Key("x"), Key("y"), Key("t")],
         output_keys= [Key("u"), Key("v"), Key("p"), Key("nu_t")],
         cfg=cfg.arch.fully_connected,
     )
 
-    # ОТРИМУЄМО ВУЗОЛ, зберігаємо його у змінну
+    # GET THE NODE, save it to a variable
     flow_network_node = flow_net.make_node(name="flow_network")
 
-    # Збираємо всі ноди
+    # Gather all nodes
     nodes = (
             navier_stokes.make_nodes()
             + zero_eq.make_nodes()
-            + [flow_network_node]  # Додаємо наш flow_network_node
+            + [flow_network_node]
     )
 
     # ---------------------
-    # ІІІ. СТВОРЕННЯ DOMAIN ТА ДОДАВАННЯ ОБМЕЖЕНЬ
+    # III. CREATE DOMAIN AND ADD CONSTRAINTS
     # ---------------------
     domain = Domain()
 
-    # 1) Вхід (Inlet), x = -width/2
+    # 1) Inlet, x = -width/2
     inlet = PointwiseBoundaryConstraint(
         nodes=nodes,
         geometry=tunnel,
-        outvar={"u": 1.0, "v": 0.0},  # вхідна швидкість
+        outvar={"u": 1.0, "v": 0.0},  # Inlet velocity
         batch_size=cfg.batch_size.inlet,
         criteria=Eq(Symbol("x"), -width / 2),
         parameterization=time_param,
     )
     domain.add_constraint(inlet, "inlet")
 
-    # 2) Вихід (Outlet), x = width/2
+    # 2) Outlet, x = width/2
     outlet = PointwiseBoundaryConstraint(
         nodes=nodes,
         geometry=tunnel,
-        outvar={"p": 0.0},  # тиск = 0 на виході
+        outvar={"p": 0.0},
         batch_size=cfg.batch_size.outlet,
         criteria=Eq(Symbol("x"), width / 2),
         parameterization=time_param,
     )
     domain.add_constraint(outlet, "outlet")
 
-    # 3) Стіни тунелю (no-slip), окрім inlet/outlet
+    # 3) Tunnel walls (no-slip), except inlet/outlet
     def not_inlet_outlet(invar, param):
         x_ = invar["x"]
-        tol = 1e-5  # невеликий допуск
+        tol = 1e-5  # Small tolerance
         return (x_ > -width / 2 + tol) & (x_ < width / 2 - tol)
 
     no_slip_walls = PointwiseBoundaryConstraint(
@@ -474,12 +474,12 @@ def run(cfg: ModulusConfig) -> None:
         geometry=tunnel,
         outvar={"u": 0.0, "v": 0.0},
         batch_size=cfg.batch_size.walls,
-        criteria=not_inlet_outlet,  # Використовуємо нашу функцію замість Abs(...)
+        criteria=not_inlet_outlet,
         parameterization=time_param,
     )
     domain.add_constraint(no_slip_walls, "no_slip_walls")
 
-    # 4) Поверхня дрона (окрім пропелерів) — no-slip
+    # 4) Drone surface (except propellers) — no-slip
     drone_main_body = drone_body + left_wing + right_wing
     drone_surface = PointwiseBoundaryConstraint(
         nodes=nodes,
@@ -490,11 +490,11 @@ def run(cfg: ModulusConfig) -> None:
     )
     domain.add_constraint(drone_surface, "drone_surface")
 
-    # 5) Пропелери (задаємо обертання)
+    # 5) Propellers (set rotation)
     X_sym = Symbol("x")
     Y_sym = Symbol("y")
 
-    # Передній пропелер
+    # Front propeller
     u_rot_front = -omega * (Y_sym - front_propeller_center[1])
     v_rot_front =  omega * (X_sym - front_propeller_center[0])
     front_propeller_velocity = PointwiseBoundaryConstraint(
@@ -509,7 +509,7 @@ def run(cfg: ModulusConfig) -> None:
     )
     domain.add_constraint(front_propeller_velocity, "front_propeller_velocity")
 
-    # Задній пропелер
+    # Rear propeller
     u_rot_rear = -omega * (Y_sym - rear_propeller_center[1])
     v_rot_rear =  omega * (X_sym - rear_propeller_center[0])
     rear_propeller_velocity = PointwiseBoundaryConstraint(
@@ -524,7 +524,7 @@ def run(cfg: ModulusConfig) -> None:
     )
     domain.add_constraint(rear_propeller_velocity, "rear_propeller_velocity")
 
-    # 6) Будівлі (no-slip)
+    # 6) Buildings (no-slip)
     buildings_surface = PointwiseBoundaryConstraint(
         nodes=nodes,
         geometry=building1 + building2,
@@ -534,7 +534,7 @@ def run(cfg: ModulusConfig) -> None:
     )
     domain.add_constraint(buildings_surface, "buildings_surface")
 
-    # 7) Перешкоди всередині тунелю (no-slip)
+    # 7) Obstacles inside the tunnel (no-slip)
     obstacles_surface = PointwiseBoundaryConstraint(
         nodes=nodes,
         geometry=obstacle1 + obstacle2,
@@ -544,7 +544,7 @@ def run(cfg: ModulusConfig) -> None:
     )
     domain.add_constraint(obstacles_surface, "obstacles_surface")
 
-    # 8) Вихрові генератори (no-slip)
+    # 8) Vortex generators (no-slip)
     vortex_generators_surface = PointwiseBoundaryConstraint(
         nodes=nodes,
         geometry=vortex_generator1 + vortex_generator2,
@@ -554,7 +554,7 @@ def run(cfg: ModulusConfig) -> None:
     )
     domain.add_constraint(vortex_generators_surface, "vortex_generators")
 
-    # 9) Інтер’єр (continuity, momentum_x, momentum_y, ...)
+    # 9) Interior (continuity, momentum_x, momentum_y, ...)
     interior_geometry = (
         tunnel
         - drone_body
@@ -584,7 +584,7 @@ def run(cfg: ModulusConfig) -> None:
     domain.add_constraint(interior, "interior")
 
     # # ---------------------
-    # # IV. ВАЛІДАЦІЯ (за бажанням)
+    # # IV. VALIDATION (optional)
     # # ---------------------
     # x_vals = np.linspace(-width/2, width/2, 50)
     # y_vals = np.linspace(-height/2, height/2, 50)
@@ -597,7 +597,7 @@ def run(cfg: ModulusConfig) -> None:
     #     "t": T.flatten()[:, None],
     # }
     #
-    # # Тут умовні "true" дані (або експериментальні).
+    # # Here are conditional "true" data (or experimental).
     # validator = PointwiseValidator(
     #     nodes=nodes,
     #     invar=validation_points,
@@ -612,22 +612,20 @@ def run(cfg: ModulusConfig) -> None:
     # domain.add_validator(validator)
 
     # ---------------------
-    # V. СТВОРЕННЯ РОЗВ’ЯЗУВАЧА ТА НАВЧАННЯ
+    # V. CREATE SOLVER AND TRAIN
     # ---------------------
     solver = Solver(cfg, domain)
     solver.solve()
     print("[INFO] Training complete!")
 
     # ---------------------
-    # VI. ВІЗУАЛІЗАЦІЯ + ЗАПИС У .VTP
+    # VI. VISUALIZATION + SAVE TO .VTS
     # ---------------------
-    # Створимо список значень часу для візуалізації
-    num_time_steps = 10  # Кількість моментів часу для візуалізації
+    # Create a list of time values for visualization
+    num_time_steps = 10  # Number of time steps for visualization
     t_values = np.linspace(time_range[0], time_range[1], num=num_time_steps)
 
-
-
-    visualize_results_and_save_vtp(
+    visualize_results_and_save_vts(
         solver=solver,
         flow_net=flow_net,
         flow_network_node=flow_network_node,
@@ -635,14 +633,16 @@ def run(cfg: ModulusConfig) -> None:
         x_max=5.0,
         y_min=-2.5,
         y_max=2.5,
-        t_values=t_values,  # Використовуємо список значень часу
+        t_values=t_values,
         nx=400,
         ny=200,
-        vtp_filename_template="results_{t:.2f}.vts",
+        vts_filename_template="results_{t:.2f}.vts",
     )
 
 
 if __name__ == "__main__":
-    # За бажанням показуємо початкову геометрію (статичний малюнок без результатів):
-    plot_geometry()
+    # Optionally show the initial geometry (static plot without results):
+    #plot_geometry()
+
+
     run()
