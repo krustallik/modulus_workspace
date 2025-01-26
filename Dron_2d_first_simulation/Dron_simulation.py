@@ -1,6 +1,4 @@
-
 from sympy import Symbol, Eq, Abs
-
 
 # == Modulus imports ==
 import modulus.sym
@@ -15,12 +13,9 @@ import numpy as np
 import pyvista as pv
 import matplotlib.pyplot as plt
 
-
-
 from modulus.sym.eq.pdes.navier_stokes import NavierStokes
 from modulus.sym.key import Key
 from modulus.sym.solver import Solver
-
 
 # Новий механізм параметризації
 from modulus.sym.geometry.parameterization import Parameterization
@@ -184,102 +179,127 @@ def plot_geometry():
 
 
 def visualize_results_and_save_vtp(
-    solver,
-    flow_net,                 # <-- об’єкт архітектури (PyTorch-модель)
-    flow_network_node,        # <-- об’єкт Node
-    x_min, x_max, y_min, y_max,
-    t_value=0.0,
-    nx=100,
-    ny=100,
-    vtp_filename="results.vtp"
+        solver,
+        flow_net,  # <-- об’єкт архітектури (PyTorch-модель)
+        flow_network_node,  # <-- об’єкт Node
+        x_min, x_max, y_min, y_max,
+        t_values,  # <-- список значень часу
+        nx=100,
+        ny=100,
+        vtp_filename_template="results_{t:.2f}.vtp",
+        drone_geometry=None  # <-- об'єкт геометрії дрона для візуалізації
 ):
     """
-    Візуалізує результати (u, v, p) на прямокутній сітці [x_min..x_max]×[y_min..y_max]
-    при часі t_value, а також зберігає ці дані у форматі .vtp.
+    Візуалізує результати (u, v, p, speed=|v|) на прямокутній сітці [x_min..x_max]×[y_min..y_max]
+    для кожного часу в t_values, а також зберігає ці дані у форматі .vtp.
+
+    Parameters:
+        solver: Solver object
+        flow_net: PyTorch model
+        flow_network_node: Node object
+        x_min, x_max, y_min, y_max: float, boundaries of the grid
+        t_values: list or array of time values
+        nx, ny: int, number of grid points
+        vtp_filename_template: str, template for .vtp filenames
+        drone_geometry: список точок або об'єкт геометрії дрона для візуалізації
     """
 
-    # 1) Створюємо сітку точок (NumPy)
-    x_vals = np.linspace(x_min, x_max, nx)
-    y_vals = np.linspace(y_min, y_max, ny)
-    X, Y = np.meshgrid(x_vals, y_vals)
-    T = np.full_like(X, t_value)
+    for t in t_values:
+        print(f"Processing time t = {t:.2f}")
 
-    invar_np = {
-        "x": X.flatten()[:, None],
-        "y": Y.flatten()[:, None],
-        "t": T.flatten()[:, None],
-    }
+        # 1) Створюємо сітку точок (NumPy)
+        x_vals = np.linspace(x_min, x_max, nx)
+        y_vals = np.linspace(y_min, y_max, ny)
+        X, Y = np.meshgrid(x_vals, y_vals)
+        T = np.full_like(X, t)
 
-    # 2) Переводимо flow_network_node в eval-режим (вимикає dropout, batchnorm тощо)
-    flow_net.eval()
+        invar_np = {
+            "x": X.flatten()[:, None],
+            "y": Y.flatten()[:, None],
+            "t": T.flatten()[:, None],
+        }
 
-    # 3) Формуємо invar_torch
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    invar_torch = {}
-    for k, v in invar_np.items():
-        # k тут буде рядок "x", "y", або "t"
-        invar_torch[k] = torch.tensor(v, dtype=torch.float32, device=device)
+        # 2) Переводимо flow_network_node в eval-режим
+        flow_net.eval()
 
-    # 4) Прямий прохід (forward pass)
-    with torch.no_grad():
-        outvar_torch = flow_network_node.evaluate(invar_torch)
+        # 3) Формуємо invar_torch
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        invar_torch = {}
+        for k, v in invar_np.items():
+            invar_torch[k] = torch.tensor(v, dtype=torch.float32, device=device)
 
-    # 5) Перетворюємо виходи назад у NumPy і надаємо формату (ny, nx)
-    u = outvar_torch["u"].cpu().numpy().reshape(X.shape)
-    v = outvar_torch["v"].cpu().numpy().reshape(X.shape)
-    p = outvar_torch["p"].cpu().numpy().reshape(X.shape)
-    speed = np.sqrt(u**2 + v**2)
+        # 4) Прямий прохід (forward pass)
+        with torch.no_grad():
+            outvar_torch = flow_network_node.evaluate(invar_torch)
 
-    # ---------------------------
-    # 6) ВІЗУАЛІЗАЦІЯ MATPLOTLIB
-    # ---------------------------
-    fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+        # 5) Перетворюємо виходи назад у NumPy і надаємо формату (ny, nx)
+        u = outvar_torch["u"].cpu().numpy().reshape(X.shape)
+        v = outvar_torch["v"].cpu().numpy().reshape(X.shape)
+        p = outvar_torch["p"].cpu().numpy().reshape(X.shape)
+        speed = np.sqrt(u**2 + v**2)
 
-    # Векторне поле (u,v)
-    axs[0].quiver(X, Y, u, v, scale=5)
-    axs[0].set_title("Velocity Field (u, v)")
-    axs[0].set_aspect("equal", "box")
-    axs[0].set_xlabel("x")
-    axs[0].set_ylabel("y")
+        # ---------------------------
+        # 6) ВІЗУАЛІЗАЦІЯ MATPLOTLIB
+        # ---------------------------
+        fig, axs = plt.subplots(1, 3, figsize=(18, 6))
 
-    # Поле тиску (p)
-    cont1 = axs[1].contourf(X, Y, p, levels=50, cmap="viridis")
-    fig.colorbar(cont1, ax=axs[1])
-    axs[1].set_title("Pressure Field (p)")
-    axs[1].set_aspect("equal", "box")
-    axs[1].set_xlabel("x")
-    axs[1].set_ylabel("y")
+        # Векторне поле (u,v)
+        axs[0].quiver(X, Y, u, v, scale=5)
+        axs[0].set_title(f"Velocity Field (u, v) at t={t:.2f}")
+        axs[0].set_aspect("equal", "box")
+        axs[0].set_xlabel("x")
+        axs[0].set_ylabel("y")
 
-    # Модуль швидкості |v|
-    cont2 = axs[2].contourf(X, Y, speed, levels=50, cmap="plasma")
-    fig.colorbar(cont2, ax=axs[2])
-    axs[2].quiver(X, Y, u, v, color="white", scale=5, alpha=0.8)
-    axs[2].set_title("Speed Magnitude |v|")
-    axs[2].set_aspect("equal", "box")
-    axs[2].set_xlabel("x")
-    axs[2].set_ylabel("y")
+        # Поле тиску (p)
+        cont1 = axs[1].contourf(X, Y, p, levels=50, cmap="viridis")
+        fig.colorbar(cont1, ax=axs[1])
+        axs[1].set_title(f"Pressure Field (p) at t={t:.2f}")
+        axs[1].set_aspect("equal", "box")
+        axs[1].set_xlabel("x")
+        axs[1].set_ylabel("y")
 
-    plt.tight_layout()
-    plt.show()
+        # Модуль швидкості |v|
+        cont2 = axs[2].contourf(X, Y, speed, levels=50, cmap="plasma")
+        fig.colorbar(cont2, ax=axs[2])
+        axs[2].quiver(X, Y, u, v, color="white", scale=5, alpha=0.8)
+        axs[2].set_title(f"Speed Magnitude |v| at t={t:.2f}")
+        axs[2].set_aspect("equal", "box")
+        axs[2].set_xlabel("x")
+        axs[2].set_ylabel("y")
 
-    # ---------------------------------
-    # 7) ЗБЕРЕЖЕННЯ РЕЗУЛЬТАТІВ У .VTP
-    # ---------------------------------
-    points = np.zeros((nx*ny, 3), dtype=np.float32)
-    points[:, 0] = X.flatten()
-    points[:, 1] = Y.flatten()
-    points[:, 2] = 0.0  # 2D
+        # Додавання геометрії дрона, якщо надано
+        if drone_geometry is not None:
+            for geom in drone_geometry:
+                geom_x, geom_y = zip(*geom)
+                axs[0].plot(geom_x, geom_y, color='blue', linewidth=2)
+                axs[1].plot(geom_x, geom_y, color='blue', linewidth=2)
+                axs[2].plot(geom_x, geom_y, color='blue', linewidth=2)
 
-    grid = pv.StructuredGrid()
-    grid.dimensions = (nx, ny, 1)  # якщо X.shape == (ny, nx)
-    grid.points = points
+        plt.tight_layout()
+        plt.show()
 
-    grid.point_data["u"] = u.flatten()
-    grid.point_data["v"] = v.flatten()
-    grid.point_data["p"] = p.flatten()
+        # ---------------------------------
+        # 7) ЗБЕРЕЖЕННЯ РЕЗУЛЬТАТІВ У .VTP
+        # ---------------------------------
+        points = np.zeros((nx * ny, 3), dtype=np.float32)
+        points[:, 0] = X.flatten()
+        points[:, 1] = Y.flatten()
+        points[:, 2] = 0.0  # 2D
 
-    grid.save(vtp_filename)
-    print(f"[INFO] Results saved to '{vtp_filename}'")
+        grid = pv.StructuredGrid()
+        grid.dimensions = (nx, ny, 1)  # якщо X.shape == (ny, nx)
+        grid.points = points
+
+        grid.point_data["u"] = u.flatten()
+        grid.point_data["v"] = v.flatten()
+        grid.point_data["p"] = p.flatten()
+        grid.point_data["speed"] = speed.flatten()  # Додавання speed
+
+        # Формування імені файлу
+        vtp_filename = vtp_filename_template.format(t=t)
+        grid.save(vtp_filename)
+        print(f"[INFO] Results at t={t:.2f} saved to '{vtp_filename}'")
+
 
 @modulus.sym.main(config_path="conf", config_name="config")
 def run(cfg: ModulusConfig) -> None:
@@ -292,7 +312,7 @@ def run(cfg: ModulusConfig) -> None:
     # ---------------------
     width = 10.0
     height = 5.0
-    drone_scale = 0.8# Зменшення розміру дрона на 50%
+    drone_scale = 0.8  # Зменшення розміру дрона на 50%
 
     # Параметри часу (кутова швидкість пропелерів)
     omega = 20.0
@@ -601,20 +621,24 @@ def run(cfg: ModulusConfig) -> None:
     # ---------------------
     # VI. ВІЗУАЛІЗАЦІЯ + ЗАПИС У .VTP
     # ---------------------
-    # Наприклад, подивимось на момент часу t = 0.0
-    # та виведемо поле в прямокутнику x: [-5..5], y: [-2.5..2.5]
+    # Створимо список значень часу для візуалізації
+    num_time_steps = 10  # Кількість моментів часу для візуалізації
+    t_values = np.linspace(time_range[0], time_range[1], num=num_time_steps)
+
+
+
     visualize_results_and_save_vtp(
         solver=solver,
-        flow_net=flow_net,  # <-- передаємо
-        flow_network_node=flow_network_node,  # <-- передаємо
+        flow_net=flow_net,
+        flow_network_node=flow_network_node,
         x_min=-5.0,
         x_max=5.0,
         y_min=-2.5,
         y_max=2.5,
-        t_value=0.0,
+        t_values=t_values,  # Використовуємо список значень часу
         nx=400,
         ny=200,
-        vtp_filename = "all_domain.vts"
+        vtp_filename_template="results_{t:.2f}.vts",
     )
 
 
