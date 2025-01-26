@@ -1,0 +1,43 @@
+# Використовуємо дефолтні налаштування Modulus
+defaults:
+  - modulus_default
+  - arch:
+      - fully_connected
+  - scheduler: tf_exponential_lr
+  - optimizer: adam
+  - loss: sum
+  - _self_
+
+training:
+  max_steps: 110000
+  rec_results_freq: 5000
+  rec_constraint_freq: 10000
+
+batch_size:
+  inlet: 600
+  outlet: 600
+  walls: 512
+  drone: 1024        # Зберігаємо більше точок на поверхні дрона
+  buildings: 512
+  obstacles: 512
+  rotors: 256
+  interior: 6000    # Зберігаємо достатню кількість точок для інтер'єру
+
+
+arch:
+  fully_connected:
+    layer_size: 768
+    nr_layers: 7
+    input_keys:
+      - x
+      - y
+      - t  # Додаємо час як вхідну змінну
+    output_keys:
+      - u
+      - v
+      - p
+      - nu_t  # Використовуємо "nu_t" для турбулентної в'язкості
+
+scheduler:
+  decay_rate: 0.92
+  decay_steps: 10000
