@@ -1,0 +1,62 @@
+
+====================
+== NVIDIA Modulus ==
+====================
+
+NVIDIA Release 24.12 (build 20675430)
+Modulus PyPi Version 0.9.0 (Git Commit: 5bc7702)
+Modulus Sym PyPi Version 1.8.0 (Git Commit: 66f1525)
+Container image Copyright (c) 2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+Copyright (c) 2014-2024 Facebook Inc.
+Copyright (c) 2011-2014 Idiap Research Institute (Ronan Collobert)
+Copyright (c) 2012-2014 Deepmind Technologies    (Koray Kavukcuoglu)
+Copyright (c) 2011-2012 NEC Laboratories America (Koray Kavukcuoglu)
+Copyright (c) 2011-2013 NYU                      (Clement Farabet)
+Copyright (c) 2006-2010 NEC Laboratories America (Ronan Collobert, Leon Bottou, Iain Melvin, Jason Weston)
+Copyright (c) 2006      Idiap Research Institute (Samy Bengio)
+Copyright (c) 2001-2004 Idiap Research Institute (Ronan Collobert, Samy Bengio, Johnny Mariethoz)
+Copyright (c) 2015      Google Inc.
+Copyright (c) 2015      Yangqing Jia
+Copyright (c) 2013-2016 The Caffe contributors
+All rights reserved.
+
+Various files include modifications (c) NVIDIA CORPORATION & AFFILIATES.  All rights reserved.
+
+This container image and its contents are governed by the NVIDIA Deep Learning Container License.
+By pulling and using the container, you accept the terms and conditions of this license:
+https://developer.nvidia.com/ngc/nvidia-deep-learning-container-license
+
+/usr/local/lib/python3.10/dist-packages/hydra/_internal/hydra.py:119: UserWarning: Future Hydra versions will no longer change working directory at job runtime by default.
+See https://hydra.cc/docs/1.2/upgrades/1.1_to_1.2/changes_to_job_working_dir/ for more information.
+  ret = run_job(
+[17:01:57] - JitManager: {'_enabled': False, '_arch_mode': <JitArchMode.ONLY_ACTIVATION: 1>, '_use_nvfuser': True, '_autograd_nodes': False}
+[17:01:57] - GraphManager: {'_func_arch': False, '_debug': False, '_func_arch_allow_partial_hessian': True}
+[17:01:57] - AmpManager: {'_enabled': False, '_mode': <AmpMode.PER_ORDER_SCALER: 0>, '_dtype': torch.float16, '_default_max_scale': 1, '_autocast_activation': False, '_autocast_firstlayer': False, '_special_terms': [], '_custom_max_scales': {}}
+[W423 17:01:57.892179054 init.cpp:767] Warning: nvfuser is no longer supported in torch script, use _jit_set_nvfuser_enabled is deprecated and a no-op (function operator())
+Warp 1.4.2 initialized:
+   CUDA Toolkit 12.6, Driver 12.8
+   Devices:
+     "cpu"      : "x86_64"
+     "cuda:0"   : "NVIDIA GeForce RTX 4070 SUPER" (12 GiB, sm_89, mempool enabled)
+   Kernel cache:
+     /root/.cache/warp/1.4.2
+Module modulus.utils.sdf 3262298 load on device 'cuda:0' took 850.01 ms  (compiled)
+[INFO] Validator with custom plotter added.
+[17:02:06] - attempting to restore from: outputs/k_epsilon_turbulence
+[17:02:06] - optimizer checkpoint not found
+[17:02:06] - model ep_network.0.pth not found
+[17:02:06] - model flow_network.0.pth not found
+[17:02:06] - model k_network.0.pth not found
+[17:02:06] - model p_network.0.pth not found
+[17:02:07] - [step:          0] record constraint batch time:  6.257e-01s
+[17:02:15] - [step:          0] record validators time:  7.092e+00s
+[17:02:15] - [step:          0] saved checkpoint to outputs/k_epsilon_turbulence
+[17:02:15] - [step:          0] loss:  2.981e+07
+[17:02:19] - Attempting cuda graph building, this may take a bit...
+[17:02:40] - [step:        100] loss:  3.006e+05, time/iteration:  2.546e+02 ms
+[17:02:53] - [step:        200] loss:  2.916e+05, time/iteration:  1.295e+02 ms
+[17:03:06] - [step:        300] loss:  2.898e+05, time/iteration:  1.289e+02 ms
+[17:03:20] - [step:        400] loss:  2.877e+05, time/iteration:  1.330e+02 ms
+[17:03:33] - [step:        500] loss:  2.910e+05, time/iteration:  1.325e+02 ms
+[17:03:46] - [step:        600] loss:  2.778e+05, time/iteration:  1.317e+02 ms
+[17:03:59] - [step:        700] loss:  2.813e+05, time/iteration:  1.321e+02 ms

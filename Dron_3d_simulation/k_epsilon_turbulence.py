@@ -1,0 +1,341 @@
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2024 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+import pyvista as pv  # for reading VTK files and geometries
+import os
+import numpy as np
+import torch
+from modulus.sym.domain.validator import PointwiseValidator
+from modulus.sym.utils.io import ValidatorPlotter
+from sympy import Symbol, Min, log, exp
+from scipy.interpolate import griddata
+import matplotlib.pyplot as plt  # for plotting
+
+import modulus.sym
+from modulus.sym.hydra import to_absolute_path, instantiate_arch, ModulusConfig
+from modulus.sym.solver import Solver
+from modulus.sym.domain import Domain
+from modulus.sym.geometry.tessellation import Tessellation
+from modulus.sym.eq.pdes.navier_stokes import NavierStokes
+from modulus.sym.domain.constraint import (
+    PointwiseBoundaryConstraint,
+    PointwiseInteriorConstraint,
+)
+from modulus.sym.domain.monitor import PointwiseMonitor
+from modulus.sym.domain.inferencer import PointwiseInferencer
+from modulus.sym.key import Key
+from modulus.sym.node import Node
+
+# Турбулентна модель k-ε
+from turbulence.custom_k_ep_3D import kEpsilonInit, kEpsilon, kEpsilonLSWF
+
+
+
+
+class SliceValidatorPlotter(ValidatorPlotter):
+    """
+    Custom plotter: для кожної змінної (u, v, w, p)
+    будуємо 1×3 підграфіки: true, pred, difference.
+    Зріз завжди по площині X ≈ 0.
+    """
+
+    def __call__(self, invar, true_outvar, pred_outvar):
+        # Витягаємо координати X, Y, Z
+        x = invar["x"][:, 0]
+        y = invar["y"][:, 0]
+        z = invar["z"][:, 0]
+
+        # Фіксуємо plane X ≈ 0
+        x_mid = 0.0
+        # Крок сітки по X для товщини зрізу
+        dx = (x.max() - x.min()) / 200.0
+        tol = 2 * dx
+
+        # Маска точок близько до X=0
+        mask = np.abs(x - x_mid) <= tol
+        if mask.sum() < 20:
+            tol *= 5
+            mask = np.abs(x - x_mid) <= tol
+
+        # координати зрізу у площині Y–Z
+        yi = y[mask]
+        zi = z[mask]
+
+        # extent для imshow: (y_min, y_max, z_min, z_max)
+        extent = (y.min(), y.max(), z.min(), z.max())
+
+        # регулярна 200×200 сітка у Y–Z
+        yi_lin = np.linspace(extent[0], extent[1], 200)
+        zi_lin = np.linspace(extent[2], extent[3], 200)
+        YI, ZI = np.meshgrid(yi_lin, zi_lin, indexing="xy")
+        pts2d = (yi, zi)
+
+        figs = []
+        for var in ("u", "v", "w", "p"):
+            tvals = true_outvar[var][mask, 0]
+            pvals = pred_outvar[var][mask, 0]
+            dvals = np.abs(pvals - tvals)
+
+            Tg = griddata(pts2d, tvals, (YI, ZI), method="linear")
+            Pg = griddata(pts2d, pvals, (YI, ZI), method="linear")
+            Dg = griddata(pts2d, dvals, (YI, ZI), method="linear")
+
+            fig, axs = plt.subplots(1, 3, figsize=(12, 4), dpi=100)
+            fig.suptitle(f"{var.upper()} slice at X≈{x_mid:.3f}", fontsize=14)
+
+            cmap_base = "coolwarm" if var == "p" else "viridis"
+            for data, title, cmap_name, ax in [
+                (Tg, f"True {var}", cmap_base, axs[0]),
+                (Pg, f"Pred {var}", cmap_base, axs[1]),
+                (Dg, f"Diff {var}",    "plasma",     axs[2]),
+            ]:
+                im = ax.imshow(data.T, origin="lower",
+                               extent=extent, cmap=cmap_name)
+                ax.set_xlabel("Y")
+                ax.set_ylabel("Z")
+                ax.set_title(title)
+                fig.colorbar(im, ax=ax, shrink=0.8)
+
+            plt.tight_layout(rect=[0,0,1,0.92])
+            figs.append((fig, f"slice_{var}"))
+
+        return figs
+
+
+
+
+
+
+
+
+
+
+
+
+@modulus.sym.main(config_path="conf", config_name="config")
+def run(cfg: ModulusConfig) -> None:
+    # --- A) Simulation parameters (from example) ---
+    # Re = 590
+    nu = 1.5e-5
+    rho = 1.0
+    y_plus = 30
+
+    # --- B) Geometry: load STL files ---
+    stl_dir   = to_absolute_path("./stl_files")
+    cube_stl  = Tessellation.from_stl(os.path.join(stl_dir, "cube.stl"), airtight=True)
+    inlet_stl = Tessellation.from_stl(os.path.join(stl_dir, "inlet.stl"), airtight=True)
+    outlet_stl= Tessellation.from_stl(os.path.join(stl_dir, "outlet.stl"), airtight=True)
+    walls_stl = Tessellation.from_stl(os.path.join(stl_dir, "walls.stl"), airtight=True)
+    drone_stl = Tessellation.from_stl(os.path.join(stl_dir, "drone.stl"), airtight=True)
+
+    # --- C) Create k-epsilon nodes ---
+    init = kEpsilonInit(nu=nu, rho=rho)
+    eq   = kEpsilon(nu=nu, rho=rho)
+    wf   = kEpsilonLSWF(nu=nu, rho=rho, y_plus=y_plus)
+
+    # --- D) Instantiate networks (Fourier-based as in example) ---
+    flow_net = instantiate_arch(
+        input_keys=[Key("x"), Key("y"), Key("z")],
+        output_keys=[Key("u"), Key("v"), Key("w")],
+        cfg=cfg.arch.fourier,
+        frequencies=("axis", [i/2 for i in range(8)]),
+        frequencies_params=("axis", [i/2 for i in range(8)]),
+    )
+    p_net = instantiate_arch(
+        input_keys=[Key("x"), Key("y"), Key("z")],
+        output_keys=[Key("p")],
+        cfg=cfg.arch.fourier,
+        frequencies=("axis", [i/2 for i in range(8)]),
+        frequencies_params=("axis", [i/2 for i in range(8)]),
+    )
+    k_net = instantiate_arch(
+        input_keys=[Key("x"), Key("y"), Key("z")],
+        output_keys=[Key("k_star")],
+        cfg=cfg.arch.fourier,
+        frequencies=("axis", [i/2 for i in range(8)]),
+        frequencies_params=("axis", [i/2 for i in range(8)]),
+    )
+    ep_net = instantiate_arch(
+        input_keys=[Key("x"), Key("y"), Key("z")],
+        output_keys=[Key("ep_star")],
+        cfg=cfg.arch.fourier,
+        frequencies=("axis", [i/2 for i in range(8)]),
+        frequencies_params=("axis", [i/2 for i in range(8)]),
+    )
+
+    # --- E) Build list of nodes ---
+    nodes = []
+    nodes += init.make_nodes()
+    nodes += eq.make_nodes()
+    nodes += wf.make_nodes()
+    # Transform k_star, ep_star to physical k, ep
+    nodes += [
+        Node.from_sympy(
+            Min(log(1 + exp(Symbol("k_star"))) + 1e-4, 20),
+            "k"
+        )
+    ]
+    nodes += [
+        Node.from_sympy(
+            Min(log(1 + exp(Symbol("ep_star"))) + 1e-4, 180),
+            "ep"
+        )
+    ]
+    nodes += [flow_net.make_node(name="flow_network")]
+    nodes += [p_net.make_node(name="p_network")]
+    nodes += [k_net.make_node(name="k_network")]
+    nodes += [ep_net.make_node(name="ep_network")]
+
+    # --- F) Domain and constraints ---
+    domain = Domain()
+
+    # 1) Wall functions on walls and drone surfaces
+    for name, geom in [("walls", walls_stl), ("drone", drone_stl)]:
+        domain.add_constraint(
+            PointwiseBoundaryConstraint(
+                nodes=nodes,
+                geometry=geom,
+                outvar={
+                    "u": 0, "v": 0, "w": 0,
+                    "velocity_wall_normal_wf": 0,
+                    "velocity_wall_parallel_wf": 0,
+                    "ep_wf": 0,
+                    "wall_shear_stress_x_wf": 0,
+                    "wall_shear_stress_y_wf": 0,
+                    "wall_shear_stress_z_wf": 0,
+                },
+                lambda_weighting={
+                    "u": 100, "v": 100, "w": 100,
+                    "velocity_wall_normal_wf": 100,
+                    "velocity_wall_parallel_wf": 100,
+                    "ep_wf": 1,
+                    "wall_shear_stress_x_wf": 100,
+                    "wall_shear_stress_y_wf": 100,
+                    "wall_shear_stress_z_wf": 100,
+                },
+                batch_size=cfg.batch_size.wf_pt,
+            ),
+            f"wf_{name}"
+        )
+
+    # 2) Interior PDE (NS + k-epsilon)
+    domain.add_constraint(
+        PointwiseInteriorConstraint(
+            nodes=nodes,
+            geometry=cube_stl,
+            outvar={
+                "continuity": 0,
+                "momentum_x": 0,
+                "momentum_y": 0,
+                "momentum_z": 0,
+                "k_equation": 0,
+                "ep_equation": 0,
+            },
+            lambda_weighting={
+                "continuity": 100,
+                "momentum_x": 1000,
+                "momentum_y": 1000,
+                "momentum_z": 1000,
+                "k_equation": 10,
+                "ep_equation": 1,
+            },
+            batch_size=cfg.batch_size.interior,
+            compute_sdf_derivatives=True,
+        ),
+        "interior"
+    )
+
+    # 3) Inlet velocity + turbulence
+    domain.add_constraint(
+        PointwiseBoundaryConstraint(
+            nodes=nodes,
+            geometry=inlet_stl,
+            outvar={"u": 0.0, "v": -10.0, "w": 0.0, "k": 0.19, "ep": 0.01},
+            batch_size=cfg.batch_size.inlet,
+            lambda_weighting={
+                "u": 100, "v": 100, "w": 100,
+                "k": 10,
+                "ep": 1,
+            },
+        ),
+        "inlet"
+    )
+
+    # 4) Outlet pressure
+    domain.add_constraint(
+        PointwiseBoundaryConstraint(
+            nodes=nodes,
+            geometry=outlet_stl,
+            outvar={"p": 0.0},
+            lambda_weighting={"p": 10},
+            batch_size=cfg.batch_size.outlet,
+        ),
+        "outlet"
+    )
+
+    # flow initialization
+    interior = PointwiseInteriorConstraint(
+        nodes=nodes,
+        geometry=cube_stl,
+        outvar={"u_init": 0, "v_init": 0, "k_init": 0, "p_init": 0, "ep_init": 0},
+        batch_size=cfg.batch_size.interior_init,
+    )
+    domain.add_constraint(interior, "InteriorInit")
+
+    # # VIII. Validator: compare PINN output vs OpenFOAM reference
+    try:
+        vtk_path = os.path.join(os.path.dirname(__file__),
+                                "foamValidationData/myWindTunnelCase_1500.vtk")
+        vmesh = pv.read(vtk_path)
+        vmesh.cell_data.clear()  # drop cell_data
+        coords = vmesh.points
+
+        invar = {
+            "x": coords[:, 0:1],
+            "y": coords[:, 1:2],
+            "z": coords[:, 2:3],
+        }
+
+        # Ground truth from OpenFOAM
+        true_vals = {
+            "u": vmesh.point_data["U"][:, 0:1],
+            "v": vmesh.point_data["U"][:, 1:2],
+            "w": vmesh.point_data["U"][:, 2:3],
+            "p": vmesh.point_data["p"].reshape(-1, 1),
+        }
+
+        # Add validator with our custom slice plotter
+        domain.add_validator(
+            PointwiseValidator(
+                nodes=nodes,
+                invar=invar,
+                true_outvar=true_vals,
+                batch_size=cfg.batch_size.interior,
+                plotter=SliceValidatorPlotter(),  # use our beginner plotter
+            ),
+            "foam_validator"
+        )
+        print("[INFO] Validator with custom plotter added.")
+    except Exception as e:
+        print("[WARN] Validator skipped:", e)
+
+    # --- F) Create solver and run training ---
+    solver = Solver(cfg, domain)
+    solver.solve()
+    print("[INFO] Training complete!")
+
+
+if __name__ == "__main__":
+    run()
