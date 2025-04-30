@@ -4,7 +4,9 @@
 defaults :
   - modulus_default
   - arch:
-      - fourier
+      - siren
+#      - fully_connected
+#      - modified_fourier
   - scheduler: tf_exponential_lr
   - optimizer: adam
   - loss: sum
@@ -12,12 +14,12 @@ defaults :
 
 jit: false
 
-optimizer:
-  lr: 5e-5
+
+
 # Налаштування параметрів тренування
 training:
   # Максимальна кількість кроків, які буде виконувати тренувальний цикл
-  max_steps: 200000
+  max_steps: 40000
   # Частота запису результатів (збереження знімків/виводів) – кожні 5000 кроків
   rec_results_freq: 2000
   # Частота запису обмежень (constraints), які використовуються для обчислення функції втрат – кожні 10000 кроків
@@ -25,21 +27,57 @@ training:
 
   rec_validation_freq: 2000
 
+arch:
+  # 1) Fully connected MLP
+  fully_connected:
+    layer_size: 512
+    nr_layers: 6
+
+  # 2) Modified Fourier‐feature MLP
+  modified_fourier:
+    layer_size: 512
+    nr_layers: 6
+    frequencies:
+      axis:     [0.0, 0.5, 1.0, 1.5, 2.0, 2.5]
+      diagonal: [0.0, 0.5, 1.0, 1.5, 2.0, 2.5]
+
+  # 3) SIREN: sinusoidal activation network
+  SirenConf:
+    layer_size: 512
+    layers:     6
 
 # Розміри батчів для різних типів обмежень (boundary/inlet/outlet тощо)
 batch_size:
   # Кількість точок для граничного обмеження на вході
-  inlet: 256
+  inlet: 128
   # Кількість точок для граничного обмеження на виході
-  outlet: 256
+  outlet: 128
   # Для внутрішніх точок домену (interior constraints, де застосовуються рівняння плину, наприклад, рівняння Нав'є-Стокса)
   interior: 2048
-  interior_init: 2048
-  wf_pt : 512
+
+  walls : 1024
+
+  drone: 512
 
 # Налаштування планувальника (scheduler) для коригування learning rate
 scheduler:
   # Коефіцієнт зниження learning rate після певних кроків
-  decay_rate: 0.95
+  decay_rate: 0.98
   # Кількість кроків, після яких learning rate буде знижуватися експоненціальним методом (зменшення кожні 15000 кроків)
-  decay_steps: 5000
+  decay_steps: 4000
+
+
+stop_criterion:
+  # Ми будемо стежити за загальною втратою ("loss") і хочемо її мінімізувати:
+  metric: loss
+  # Різниця в 0.1 — вважаємо непомітною зміну меншу за цю величину:
+  min_delta: 0.1
+  # Якщо протягом 10 000 кроків (5 перевірок по 2 000 кроків) loss не зменшився
+  # мінімум на 1e-3, — зупиняємо навчання
+  patience: 10000
+  #  кожні 1000 кроків перевіряємо, чи metric покращився
+  freq: 2000
+  # Мінімізуємо: зупиняємось коли втрата НЕ зменшується
+  mode: min
+  # Жорсткий чи не жорсткий ріжок
+  strict: false
