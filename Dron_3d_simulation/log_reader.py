@@ -7,7 +7,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 LOG_PATH = 'log/log.txt'
-BIN_SIZE = 5000
+BIN_SIZE = 2000
 OUT_CSV = 'loss_avg.csv'
 OUT_PNG = 'loss_avg_plot.png'
 
@@ -24,11 +24,15 @@ with open(LOG_PATH, 'r') as f:
             loss = float(m.group(2))
             data.append((step, loss))
 
-# Групуємо по вікнах
+# Групуємо по вікнах так, щоб кроки, кратні BIN_SIZE, відносились до попереднього вікна
 sums = {}
 counts = {}
 for step, loss in data:
-    bin_start = (step // BIN_SIZE) * BIN_SIZE
+    if step > 0:
+        # для step, кратного BIN_SIZE, (step-1)//BIN_SIZE поверне індекс попереднього біну
+        bin_start = ((step - 1) // BIN_SIZE) * BIN_SIZE
+    else:
+        bin_start = 0
     sums.setdefault(bin_start, 0.0)
     counts.setdefault(bin_start, 0)
     sums[bin_start] += loss
@@ -37,6 +41,7 @@ for step, loss in data:
 # Обчислюємо середні та готуємо списки для запису/плоту
 bins = sorted(sums.keys())
 avg_losses = []
+
 with open(OUT_CSV, 'w', newline='') as csvfile:
     writer = csv.writer(csvfile)
     writer.writerow(['step_bin_start', 'avg_loss'])
@@ -45,6 +50,12 @@ with open(OUT_CSV, 'w', newline='') as csvfile:
         avg_losses.append(avg)
         writer.writerow([b, f'{avg:.6f}'])
 print(f"Середні loss по кожних {BIN_SIZE} кроках записані у {OUT_CSV}")
+
+# --- Виводимо останнє значення ---
+if avg_losses:
+    last_avg = avg_losses[-1]
+    last_bin = bins[-1]
+    print(f"Останнє середнє loss (для кроків з {last_bin} до {last_bin + BIN_SIZE - 1}): {last_avg:.6f}")
 
 # Малюємо графік
 plt.figure(figsize=(10, 6))
