@@ -15,7 +15,7 @@ import scipy.interpolate  # for griddata interpolation
 from modulus.sym.domain.monitor import PointwiseMonitor
 from scipy.interpolate import griddata
 import matplotlib.pyplot as plt  # for plotting
-
+from sympy import Symbol, Abs, Max
 # ---------------------------------------------------------------------
 # 2) Import Modulus Sym libraries
 # ---------------------------------------------------------------------
@@ -33,8 +33,7 @@ from modulus.sym.eq.pdes.turbulence_zero_eq import ZeroEquation
 from modulus.sym.solver import Solver
 from modulus.sym.key import Key
 from modulus.sym.utils.io.plotter import ValidatorPlotter
-from sympy import Eq, Symbol
-
+from sympy import Eq, Symbol, Abs
 
 
 class SliceValidatorPlotter(ValidatorPlotter):
@@ -94,7 +93,7 @@ class SliceValidatorPlotter(ValidatorPlotter):
                 (Pg, f"Pred {var}", cmap_base, axs[1]),
                 (Dg, f"Diff {var}",    "plasma",     axs[2]),
             ]:
-                im = ax.imshow(data.T, origin="lower",
+                im = ax.imshow(data, origin="lower",
                                extent=extent, cmap=cmap_name)
                 ax.set_xlabel("Y")
                 ax.set_ylabel("Z")
@@ -121,19 +120,19 @@ def run(cfg: ModulusConfig):
 
     # Cube mesh
     cube_stl = Tessellation.from_stl(
-        os.path.join(stl_dir, "cube.stl"), airtight=True
+        os.path.join(stl_dir, "cube_without_drone.stl"), airtight=True
     )
     # Cube mesh
     inlet_stl = Tessellation.from_stl(
-        os.path.join(stl_dir, "inlet.stl"), airtight=True
+        os.path.join(stl_dir, "inlet.stl"), airtight=False
     )
     # Cube mesh
     outlet_stl = Tessellation.from_stl(
-        os.path.join(stl_dir, "outlet.stl"), airtight=True
+        os.path.join(stl_dir, "outlet.stl"), airtight=False
     )
     # Cube mesh
     walls_stl = Tessellation.from_stl(
-        os.path.join(stl_dir, "walls.stl"), airtight=True
+        os.path.join(stl_dir, "walls.stl"), airtight=False
     )
 
     # Drone body mesh
@@ -141,37 +140,74 @@ def run(cfg: ModulusConfig):
         os.path.join(stl_dir, "drone.stl"), airtight=True
     )
 
-
-    # Domain bounds (matching STL coordinates)
-    ymin, ymax = -10, 10
-
     # --- C) Define PDE: steady incompressible Navier–Stokes ---
-    ze_eq = ZeroEquation(nu=nu_phys, dim=3, time=False, max_distance=0.5,rho=rho_phys)
+    ze_eq = ZeroEquation(nu=nu_phys, dim=3, time=False, max_distance=0.1 ,rho=rho_phys)
     ns_eq = NavierStokes(nu=ze_eq.equations["nu"], rho=rho_phys, dim=3, time=False)
+
 
     # --- D) PINN architecture (MLP) ---
     input_keys  = [Key("x"), Key("y"), Key("z")]
     output_keys = [Key("u"), Key("v"),Key("w"), Key("p")]
-    flow_net    = instantiate_arch(
+
+
+    # 1) Fully-connected MLP
+
+    # flow_net = instantiate_arch(
+    #     input_keys=input_keys,
+    #     output_keys=output_keys,
+    #     cfg=cfg.arch.fully_connected
+    # )
+
+    # 2) Modified Fourier-feature MLP
+
+    # flow_net = instantiate_arch(
+    #     input_keys=input_keys,
+    #     output_keys=output_keys,
+    #     cfg=cfg.arch.modified_fourier,
+    #     frequencies=("axis,diagonal", [i/2.0 for i in range(6)]),
+    # )
+
+    # 3) SIREN: sinusoidal activation network
+
+    flow_net = instantiate_arch(
         input_keys=input_keys,
         output_keys=output_keys,
-        cfg=cfg.arch.fully_connected
+        cfg=cfg.arch.siren
     )
-    flow_node   = flow_net.make_node(name="flow_network")
 
-    nodes = ns_eq.make_nodes()+ns_eq.make_nodes()+ [flow_node]
-    # nodes = ns_eq.make_nodes() + [flow_node]
+
+    nodes = (ns_eq.make_nodes()+
+             ze_eq.make_nodes()+
+             [flow_net.make_node(name="flow_network")])
+
+
 
     # --- E) Create domain and add constraints ---
     domain = Domain()
 
-    # 1) Inlet
+
+
+    # Символьні координати на грані inlet (площина y = +10)
+    x, y, z = Symbol("x"), Symbol("y"), Symbol("z")
+
+    # Півширина прямокутника по осях X і Z (наприклад, cube з -10 до +10 → половина = 10)
+    Rx = 3
+    Rz = 2.6
+
+    # Лінійне зважування: максимум у центрі, спад до 0 на краях по X та Z
+    w_expr = Max(1 - Abs(x) / Rx, 0) * Max(1 - Abs(z) / Rz, 0)
+
     domain.add_constraint(
         PointwiseBoundaryConstraint(
             nodes=nodes,
             geometry=inlet_stl,
             outvar={"u": 0.0, "v": -u_in, "w": 0.0},
-            batch_size=cfg.batch_size.inlet
+            lambda_weighting={
+                "u": 1.0,
+                "v": w_expr,
+                "w": 1.0,
+            },
+            batch_size=cfg.batch_size.inlet,
         ),
         "inlet"
     )
@@ -221,6 +257,8 @@ def run(cfg: ModulusConfig):
                 "momentum_z":  0.0,
             },
             batch_size=cfg.batch_size.interior,
+
+            #for zeroEquation
             compute_sdf_derivatives=True,
             lambda_weighting={
                 "continuity": Symbol("sdf"),
@@ -236,7 +274,7 @@ def run(cfg: ModulusConfig):
 
 
 
-    # # VIII. Validator: compare PINN output vs OpenFOAM reference
+    # # # VIII. Validator: compare PINN output vs OpenFOAM reference
     try:
         vtk_path = os.path.join(os.path.dirname(__file__),
                                 "foamValidationData/myWindTunnelCase_1500.vtk")
@@ -272,6 +310,24 @@ def run(cfg: ModulusConfig):
         print("[INFO] Validator with custom plotter added.")
     except Exception as e:
         print("[WARN] Validator skipped:", e)
+
+    # add monitors
+    global_monitor = PointwiseMonitor(
+        cube_stl.sample_interior(1000),
+        output_names=["continuity", "momentum_x", "momentum_y"],
+        metrics={
+            "mass_imbalance": lambda var: torch.sum(
+                var["area"] * torch.abs(var["continuity"])
+            ),
+            "momentum_imbalance": lambda var: torch.sum(
+                var["area"]
+                * (torch.abs(var["momentum_x"]) + torch.abs(var["momentum_y"]))
+            ),
+        },
+        nodes=nodes,
+        requires_grad=True,
+    )
+    domain.add_monitor(global_monitor)
 
     # --- F) Create solver and run training ---
     solver = Solver(cfg, domain)
