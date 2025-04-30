@@ -1,22 +1,25 @@
-import os, numpy as np, pyvista as pv
+import os
+import numpy as np
+import pyvista as pv
 
-VTP = "outputs/__main__/validators/foam_validator.vtp"
-u_in = 10.0            # [m/s]
-rho  = 1.0             # [kg/m3]
-ref  = {"u": u_in, "v": u_in, "w": u_in, "p": 0.5*rho*u_in**2}
-thr  = {"u": 0.05, "v": 0.05, "w": 0.05, "p": 1e-2}
+# Шлях до VTP-файла
+VTP = "outputs/navier_and_zero/validators/foam_validator.vtp"
 
+# Завантажуємо сітку з даними pred_* та true_*
 mesh = pv.read(VTP)
 
 def stats(var):
     pred = mesh.point_data[f"pred_{var}"].astype(float)
     true = mesh.point_data[f"true_{var}"].astype(float)
-    mask = np.abs(true) > thr[var]
-    if mask.sum() == 0:
-        print(f"{var:>4s}  — всі значення < порога, пропускаю")
-        return
-    err = np.abs(pred[mask] - true[mask]) / ref[var] * 100
-    print(f"{var:>4s}  mean={err.mean():8.3f}%  95‑pct={np.percentile(err,95):8.3f}%  max={err.max():8.3f}%")
+    # MSE по всіх точках
+    mse = np.mean((pred - true)**2)
+    # Вивід у фіксованому форматі з 6-ма знаками після коми
+    print(f"{var:>4s}  MSE = {mse:.6f}")
+    return mse
 
-for v in ("p", "u", "v", "w"):
-    stats(v)
+# Обчислюємо MSE для p, u, v, w
+mses = [stats(v) for v in ("p", "u", "v", "w")]
+
+# Додатково: загальне середнє MSE
+overall_mse = np.mean(mses)
+print(f"\nOverall MSE (p,u,v,w): {overall_mse:.6f}")
