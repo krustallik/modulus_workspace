@@ -11,6 +11,8 @@ import torch
 import os           # for file path operations
 import numpy as np  # for numerical arrays and math
 import pyvista as pv  # for reading VTK files and geometries
+import re
+import csv
 import scipy.interpolate  # for griddata interpolation
 from modulus.sym.domain.monitor import PointwiseMonitor
 from scipy.interpolate import griddata
@@ -38,37 +40,26 @@ from sympy import Eq, Symbol, Abs
 
 class SliceValidatorPlotter(ValidatorPlotter):
     """
-    Custom plotter: для кожної змінної (u, v, w, p)
-    будуємо 1×3 підграфіки: true, pred, difference.
-    Зріз завжди по площині X ≈ 0.
+    Custom plotter: for each variable (u, v, w, p)
+    we build a single figure with three vertical panels: true, pred, difference.
+    Slice always at X ≈ 0.
     """
-
     def __call__(self, invar, true_outvar, pred_outvar):
-        # Витягаємо координати X, Y, Z
+        # Extract coordinates and build mask around x ≈ 0
         x = invar["x"][:, 0]
         y = invar["y"][:, 0]
         z = invar["z"][:, 0]
-
-        # Фіксуємо plane X ≈ 0
         x_mid = 0.0
-        # Крок сітки по X для товщини зрізу
         dx = (x.max() - x.min()) / 200.0
         tol = 2 * dx
-
-        # Маска точок близько до X=0
         mask = np.abs(x - x_mid) <= tol
         if mask.sum() < 20:
             tol *= 5
             mask = np.abs(x - x_mid) <= tol
 
-        # координати зрізу у площині Y–Z
-        yi = y[mask]
-        zi = z[mask]
-
-        # extent для imshow: (y_min, y_max, z_min, z_max)
+        # Prepare grid for interpolation
+        yi, zi = y[mask], z[mask]
         extent = (y.min(), y.max(), z.min(), z.max())
-
-        # регулярна 200×200 сітка у Y–Z
         yi_lin = np.linspace(extent[0], extent[1], 200)
         zi_lin = np.linspace(extent[2], extent[3], 200)
         YI, ZI = np.meshgrid(yi_lin, zi_lin, indexing="xy")
@@ -76,36 +67,93 @@ class SliceValidatorPlotter(ValidatorPlotter):
 
         figs = []
         for var in ("u", "v", "w", "p"):
+            # Gather true, pred, and diff values
             tvals = true_outvar[var][mask, 0]
             pvals = pred_outvar[var][mask, 0]
             dvals = np.abs(pvals - tvals)
 
+            # Interpolate onto regular grid
             Tg = griddata(pts2d, tvals, (YI, ZI), method="linear")
             Pg = griddata(pts2d, pvals, (YI, ZI), method="linear")
             Dg = griddata(pts2d, dvals, (YI, ZI), method="linear")
 
-            fig, axs = plt.subplots(1, 3, figsize=(12, 4), dpi=100)
-            fig.suptitle(f"{var.upper()} slice at X≈{x_mid:.3f}", fontsize=14)
-
+            # Choose colormaps
             cmap_base = "coolwarm" if var == "p" else "viridis"
-            for data, title, cmap_name, ax in [
-                (Tg, f"True {var}", cmap_base, axs[0]),
-                (Pg, f"Pred {var}", cmap_base, axs[1]),
-                (Dg, f"Diff {var}",    "plasma",     axs[2]),
-            ]:
-                im = ax.imshow(data, origin="lower",
-                               extent=extent, cmap=cmap_name)
+
+            # Create a single figure with 3 vertical subplots
+            fig, axes = plt.subplots(3, 1, figsize=(6, 15), dpi=100)
+            for ax, data, title, cmap_name in zip(
+                axes,
+                (Tg, Pg, Dg),
+                (
+                    f"True {var.upper()} slice at X≈{x_mid:.3f}",
+                    f"Pred {var.upper()} slice at X≈{x_mid:.3f}",
+                    f"Diff {var.upper()} slice at X≈{x_mid:.3f}",
+                ),
+                (cmap_base, cmap_base, "plasma"),
+            ):
+                im = ax.imshow(data, origin="lower", extent=extent, cmap=cmap_name)
                 ax.set_xlabel("Y")
                 ax.set_ylabel("Z")
                 ax.set_title(title)
                 fig.colorbar(im, ax=ax, shrink=0.8)
 
-            plt.tight_layout(rect=[0,0,1,0.92])
-            figs.append((fig, f"slice_{var}"))
+            plt.tight_layout()
+            figs.append((fig, var))
 
         return figs
 
+def analyze_loss(log_path, bin_size, out_csv, out_png):
+    """
+    Parse training log, compute average loss per bin, save CSV and plot.
+    """
+    pattern = re.compile(r'\[step:\s*(\d+)\].*?loss:\s*([\d\.e\+\-]+)')
+    data = []
+    with open(log_path, 'r') as f:
+        for line in f:
+            m = pattern.search(line)
+            if m:
+                data.append((int(m.group(1)), float(m.group(2))))
+    sums, counts = {}, {}
+    for step, loss in data:
+        bin_start = ((step-1)//bin_size)*bin_size if step>0 else 0
+        sums.setdefault(bin_start,0.0)
+        counts.setdefault(bin_start,0)
+        sums[bin_start] += loss
+        counts[bin_start] += 1
+    bins = sorted(sums.keys())
+    avg_losses = [sums[b]/counts[b] for b in bins]
+    # CSV
+    with open(out_csv, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(['step_bin_start','avg_loss'])
+        for b, avg in zip(bins, avg_losses):
+            writer.writerow([b, f"{avg:.6f}"])
+    print(f"Average loss per {bin_size}-step bins saved to {out_csv}")
+    # Plot
+    plt.figure(figsize=(10,6))
+    plt.plot(bins, avg_losses, marker='o', linestyle='-')
+    plt.title(f"Average Loss per {bin_size} Steps")
+    plt.xlabel("Step (bin start)"); plt.ylabel("Average Loss")
+    plt.grid(True); plt.tight_layout()
+    plt.savefig(out_png, dpi=300)
+    print(f"Loss plot saved to {out_png}")
 
+
+def compute_mse_stats(vtp_path):
+    """
+    Load validator VTP, compute and print MSE for u,v,w,p plus overall.
+    """
+    mesh = pv.read(vtp_path)
+    def stats(var):
+        pred = mesh.point_data[f"pred_{var}"].astype(float)
+        true = mesh.point_data[f"true_{var}"].astype(float)
+        mse = np.mean((pred-true)**2)
+        print(f"{var:>4s}  MSE = {mse:.6f}")
+        return mse
+    mses = [stats(v) for v in ("p","u","v","w")]
+    overall = np.mean(mses)
+    print(f"\nOverall MSE (p,u,v,w): {overall:.6f}")
 
 
 @modulus.sym.main(config_path="conf", config_name="config")
@@ -160,20 +208,20 @@ def run(cfg: ModulusConfig):
 
     # 2) Modified Fourier-feature MLP
 
-    # flow_net = instantiate_arch(
-    #     input_keys=input_keys,
-    #     output_keys=output_keys,
-    #     cfg=cfg.arch.modified_fourier,
-    #     frequencies=("axis,diagonal", [i/2.0 for i in range(6)]),
-    # )
-
-    # 3) SIREN: sinusoidal activation network
-
     flow_net = instantiate_arch(
         input_keys=input_keys,
         output_keys=output_keys,
-        cfg=cfg.arch.siren
+        cfg=cfg.arch.modified_fourier,
+        frequencies=("axis,diagonal", [i/2.0 for i in range(6)]),
     )
+
+    # 3) SIREN: sinusoidal activation network
+
+    # flow_net = instantiate_arch(
+    #     input_keys=input_keys,
+    #     output_keys=output_keys,
+    #     cfg=cfg.arch.siren
+    # )
 
 
     nodes = (ns_eq.make_nodes()+
@@ -311,28 +359,23 @@ def run(cfg: ModulusConfig):
     except Exception as e:
         print("[WARN] Validator skipped:", e)
 
-    # add monitors
-    global_monitor = PointwiseMonitor(
-        cube_stl.sample_interior(1000),
-        output_names=["continuity", "momentum_x", "momentum_y"],
-        metrics={
-            "mass_imbalance": lambda var: torch.sum(
-                var["area"] * torch.abs(var["continuity"])
-            ),
-            "momentum_imbalance": lambda var: torch.sum(
-                var["area"]
-                * (torch.abs(var["momentum_x"]) + torch.abs(var["momentum_y"]))
-            ),
-        },
-        nodes=nodes,
-        requires_grad=True,
-    )
-    domain.add_monitor(global_monitor)
 
     # --- F) Create solver and run training ---
     solver = Solver(cfg, domain)
     solver.solve()
     print("[INFO] Training complete!")
+
+
+    analyze_loss(
+        log_path=os.path.join(os.path.dirname(__file__),"log","log.txt"),
+        bin_size=2000,
+        out_csv="loss_avg.csv",
+        out_png="loss_avg_plot.png"
+    )
+    compute_mse_stats(
+        vtp_path=os.path.join(os.path.dirname(__file__),
+                              "outputs","navier_and_zero","validators","foam_validator.vtp")
+    )
 
 
 if __name__ == "__main__":
